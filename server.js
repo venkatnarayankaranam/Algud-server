@@ -121,7 +121,7 @@ const app = express();
 
 // ---------- CORS SETUP ----------
 const allowedOrigins = [
-  'http://localhost:3000',           // Local development
+  'http://localhost:3000',           // Local frontend
   'https://algud-iota.vercel.app'    // Deployed frontend
 ];
 
@@ -141,10 +141,17 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+app.set('trust proxy', 1); // Needed for OAuth on Render
 
-// Passport for OAuth
+// ---------- PASSPORT / GOOGLE OAUTH ----------
 configurePassport();
 app.use(passport.initialize());
+
+// ---------- DEBUG LOGGING ----------
+app.use((req, res, next) => {
+  console.log(`[DEBUG] ${req.method} ${req.originalUrl}`);
+  next();
+});
 
 // ---------- ROUTES ----------
 app.use('/api/auth', require('./routes/auth'));
@@ -154,7 +161,7 @@ app.use('/api/payment', require('./routes/payment'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/upload', require('./routes/upload'));
 
-// Health check endpoint
+// Health check
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
@@ -163,7 +170,7 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Optional root route for browser check
+// Optional root route
 app.get('/', (req, res) => {
   res.send('🚀 ALGUD Backend is live!');
 });
