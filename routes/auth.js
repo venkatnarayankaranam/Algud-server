@@ -132,8 +132,11 @@ router.get(
 
     res.cookie('token', token, {
       httpOnly: true,
+      // For OAuth redirect flows the cookie is set during a cross-site
+      // navigation (backend -> frontend). Modern browsers require
+      // SameSite=None and Secure for cookies used in cross-site contexts.
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: 'none',
     });
 
     return res.redirect(clientUrl);
