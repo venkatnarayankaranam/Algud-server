@@ -138,7 +138,7 @@ const verifyPayment = async (req, res) => {
 // Backwards-compatible endpoint name used earlier; keep a simple handler for stubs
 const payuResponse = async (req, res) => {
   // For compatibility with existing routes, redirect to client with failure
-  const clientBase = process.env.CLIENT_URL || 'http://localhost:3000'
+  const clientBase = process.env.CLIENT_URL || 'http://https://algud-iota.vercel.app/'
   return res.redirect(`${clientBase}/payment/success?status=failed&verified=false`)
 }
 
