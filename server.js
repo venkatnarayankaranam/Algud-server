@@ -14,7 +14,7 @@ const app = express();
 
 // Middleware
 const cookieParser = require('cookie-parser')
-const CLIENT_URL = process.env.CLIENT_URL || 'http://https://algud-iota.vercel.app/'
+const CLIENT_URL = process.env.CLIENT_URL || 'http://https://algud-iota.vercel.app'
 app.use(cors({
   origin: CLIENT_URL,
   methods: "GET,HEAD,PUT,PATCH,POST,DELETE",

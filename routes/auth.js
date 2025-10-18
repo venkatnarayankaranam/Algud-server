@@ -51,7 +51,7 @@ router.get('/google', passport.authenticate('google', { scope: ['profile', 'emai
 // OAuth callback - passport will attach { user, token } as the user object
 router.get('/google/callback', passport.authenticate('google', { session: false, failureRedirect: '/login' }), (req, res) => {
   // On success, redirect back to client with the token as a query param
-  const clientUrl = process.env.CLIENT_URL || 'http://https://algud-iota.vercel.app/'
+  const clientUrl = process.env.CLIENT_URL || 'http://https://algud-iota.vercel.app'
   const token = req.user && req.user.token
   if (!token) return res.redirect(`${clientUrl}/login`)
   // set httpOnly cookie and redirect to client root
