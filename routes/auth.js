@@ -137,11 +137,13 @@ router.get(
 
     const isProd = ENV === 'production';
     res.cookie('token', token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    path: '/', // ✅ important so browser sends cookie everywhere
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+
 
     return res.redirect(clientUrl);
   }
