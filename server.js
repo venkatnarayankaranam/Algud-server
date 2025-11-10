@@ -118,7 +118,7 @@ dotenv.config();
 connectDB();
 
 const app = express();
-
+app.set("trust proxy", 1);
 // ---------- CORS SETUP (static allow list, credentials enabled) ----------
 const allowedOrigins = [
   'http://localhost:3000',
