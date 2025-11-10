@@ -57,7 +57,7 @@ const { generateToken } = require('../controllers/authController');
 module.exports = function configurePassport() {
   const callbackURL =
     process.env.GOOGLE_CALLBACK_URL ||
-    'http://localhost:5000/api/auth/google/callback';
+    'https://algud-server.onrender.com/api/auth/google/callback';
 
   console.log('🧭 Google OAuth callback URL:', callbackURL);
 
