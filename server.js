@@ -120,10 +120,14 @@ connectDB();
 const app = express();
 
 // ---------- CORS SETUP ----------
+// Allow client from env when set, plus common local dev ports and deployed URL.
 const allowedOrigins = [
-  'http://localhost:3000',           // Local frontend
-  'https://algud-iota.vercel.app'    // Deployed frontend
-];
+  process.env.CLIENT_URL,
+  'http://localhost:5173',            // Vite dev
+  'http://localhost:3001',            // Vite fallback dev port
+  'http://localhost:3000',            // CRA/Next dev
+  'https://algud-iota.vercel.app'     // Deployed frontend
+].filter(Boolean);
 
 app.use(cors({
   origin: function(origin, callback) {

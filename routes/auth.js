@@ -125,18 +125,22 @@ router.get(
     failureRedirect: '/login',
   }),
   (req, res) => {
-    const clientUrl = process.env.CLIENT_URL || 'https://algud-iota.vercel.app';
+    const ENV = process.env.NODE_ENV;
+    const clientUrl = process.env.CLIENT_URL
+      || (ENV === 'production'
+        ? 'https://algud-iota.vercel.app'
+        : 'http://localhost:5173');
+
     const token = req.user?.token;
 
     if (!token) return res.redirect(`${clientUrl}/login`);
 
+    const isProd = ENV === 'production';
     res.cookie('token', token, {
       httpOnly: true,
-      // For OAuth redirect flows the cookie is set during a cross-site
-      // navigation (backend -> frontend). Modern browsers require
-      // SameSite=None and Secure for cookies used in cross-site contexts.
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
     return res.redirect(clientUrl);

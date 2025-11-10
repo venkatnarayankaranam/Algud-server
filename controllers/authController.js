@@ -46,6 +46,15 @@ const register = async (req, res) => {
       // generate and persist token on user record
       const token = generateToken(user._id)
       try { user.lastToken = token; await user.save(); } catch (e) { console.warn('Failed to save lastToken:', e) }
+
+      const isProd = process.env.NODE_ENV === 'production'
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: isProd,
+        sameSite: isProd ? 'none' : 'lax',
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+      })
+
       res.status(201).json({
         success: true,
         message: 'User registered successfully',
@@ -106,6 +115,15 @@ const login = async (req, res) => {
       });
     }
 
+    const token = (function(){ const t = generateToken(user._id); try { user.lastToken = t; user.save().catch(()=>{}); } catch(e){} return t })()
+    const isProd = process.env.NODE_ENV === 'production'
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    })
+
     res.json({
       success: true,
       message: 'Login successful',
@@ -114,7 +132,7 @@ const login = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        token: (function(){ const t = generateToken(user._id); try { user.lastToken = t; user.save().catch(()=>{}); } catch(e){} return t })()
+        token
       }
     });
   } catch (error) {
@@ -173,12 +191,12 @@ const googleAuth = async (req, res) => {
     const token = generateToken(user._id);
     try { user.lastToken = token; await user.save(); } catch (e) { console.warn('Failed to save lastToken (googleAuth):', e) }
 
-    // Cookie options - secure flag should be true in production (HTTPS)
+    const isProd = process.env.NODE_ENV === 'production'
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
     return res.json({ success: true, data: { _id: user._id, name: user.name, email: user.email, role: user.role } });

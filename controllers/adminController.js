@@ -3,6 +3,8 @@ const Product = require('../models/Product');
 const User = require('../models/User');
 const Category = require('../models/Category');
 const bcrypt = require('bcryptjs');
+const fs = require('fs');
+const path = require('path');
 
 // @desc    Get revenue analytics
 // @route   GET /api/admin/revenue
@@ -300,35 +302,124 @@ const createProduct = async (req, res) => {
     });
     if (req.file) console.log('createProduct received req.file (exists):', !!req.file);
 
-    let imageURL = req.body.imageURL || '';
+  let imageURL = req.body.imageURL || '';
 
-    // If file is uploaded and has a buffer (memoryStorage -> Google Drive), upload to Drive
+    // If file is uploaded and has a buffer (memoryStorage), try Drive then fallback to local disk
     if (req.file && req.file.buffer) {
-      const { uploadBufferToDrive } = require('../services/googleDrive');
-      const ext = req.file.originalname.split('.').pop()
-      const filename = `product-${Date.now()}.${ext}`
-      const result = await uploadBufferToDrive(req.file.buffer, filename, req.file.mimetype)
-      imageURL = result.webContentLink || result.webViewLink || imageURL
+      let uploaded = false;
+      try {
+        const { uploadBufferToDrive } = require('../services/googleDrive');
+        const ext = req.file.originalname.split('.').pop()
+        const filename = `product-${Date.now()}.${ext}`
+        const result = await uploadBufferToDrive(req.file.buffer, filename, req.file.mimetype)
+        imageURL = result.webContentLink || result.webViewLink || imageURL
+        uploaded = Boolean(imageURL)
+      } catch (e) {
+        // ignore and fallback to local save
+      }
+      if (!uploaded) {
+        try {
+          const ext = req.file.originalname.includes('.') ? req.file.originalname.split('.').pop() : 'jpg'
+          const filename = `product-${Date.now()}.${ext}`
+          const uploadsDir = path.join(__dirname, '..', 'uploads', 'products')
+          await fs.promises.mkdir(uploadsDir, { recursive: true })
+          const filePath = path.join(uploadsDir, filename)
+          await fs.promises.writeFile(filePath, req.file.buffer)
+          imageURL = `${req.protocol}://${req.get('host')}/uploads/products/${filename}`
+        } catch (writeErr) {
+          console.error('Local save fallback failed:', writeErr)
+        }
+      }
     } else if (req.file && req.file.path) {
       // If using Cloudinary storage, multer provides a `path` with the uploaded URL
       imageURL = req.file.path
     }
 
-    // Normalize sizes: if sizes is a string (comma-separated or single), convert to array
-    let sizes = req.body.sizes;
-    if (!sizes) sizes = [];
-    else if (typeof sizes === 'string') {
-      // If sent as comma-separated string or a single value
-      sizes = sizes.includes(',') ? sizes.split(',').map(s => s.trim()).filter(Boolean) : [sizes]
+  // Basic field validations up-front for clearer 400s (before mongoose):
+    const requiredText = (v) => typeof v === 'string' && v.trim().length > 0
+    if (!requiredText(req.body.name)) {
+      return res.status(400).json({ success: false, message: 'Product name is required.' })
+    }
+    if (!requiredText(req.body.description)) {
+      return res.status(400).json({ success: false, message: 'Product description is required.' })
+    }
+
+    // Coerce numeric fields safely
+    const priceNum = Number(req.body.price)
+    const stockNum = Number(req.body.stock)
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      return res.status(400).json({ success: false, message: 'Price must be a non-negative number.' })
+    }
+    if (!Number.isFinite(stockNum) || stockNum < 0) {
+      return res.status(400).json({ success: false, message: 'Stock must be a non-negative number.' })
+    }
+
+    // Validate category against schema enum to fail fast
+    const allowedCategories = ['Tops', 'Bottoms', 'Dresses', 'Outerwear', 'Accessories', 'Shoes']
+    if (!requiredText(req.body.category) || !allowedCategories.includes(req.body.category)) {
+      return res.status(400).json({ success: false, message: 'Category is required and must be a valid value.' })
+    }
+
+  // Normalize sizes robustly:
+    // Accept: array of strings, repeated form field values (multer creates array), JSON string, comma-separated string.
+    const allowedSizes = ['XS','S','M','L','XL','XXL','28','30','32','34','36','38','40','42'];
+    let rawSizes = req.body.sizes;
+
+    // Multer with multiple 'sizes' fields yields either a single string or an array of strings
+    if (Array.isArray(rawSizes)) {
+      rawSizes = rawSizes.flat(Infinity); // flatten any nested arrays
+    } else if (typeof rawSizes === 'string') {
+      const trimmed = rawSizes.trim();
+      // Try JSON parse if looks like ["S","M"]
+      if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          rawSizes = Array.isArray(parsed) ? parsed : [parsed];
+        } catch (e) {
+          // fall back to comma splitting
+          rawSizes = trimmed.includes(',') ? trimmed.split(',') : [trimmed];
+        }
+      } else {
+        rawSizes = trimmed.includes(',') ? trimmed.split(',') : [trimmed];
+      }
+    }
+
+    let sizes = Array.isArray(rawSizes) ? rawSizes.map(s => String(s).trim()).filter(Boolean) : [];
+    // Flatten again in case of nested arrays from JSON.parse
+    sizes = sizes.flat(Infinity);
+    // Deduplicate & filter to allowed list
+    sizes = [...new Set(sizes)].filter(s => allowedSizes.includes(s));
+
+    // Validation guard before hitting Mongoose schema to provide clearer message
+    // Only require imageURL when no file was uploaded.
+    const hasFile = Boolean(req.file && (req.file.buffer || req.file.path))
+    if (!hasFile && !imageURL) {
+      return res.status(400).json({ success: false, message: 'Please upload an image or provide an image URL.' });
+    }
+    if (!sizes.length) {
+      return res.status(400).json({ success: false, message: 'At least one valid size is required.' });
     }
 
     const productData = {
-      ...req.body,
-      sizes,
-      imageURL
+      name: req.body.name.trim(),
+      description: req.body.description.trim(),
+      price: priceNum,
+      category: req.body.category,
+      stock: stockNum,
+      imageURL,
+      sizes
     };
 
-    const product = await Product.create(productData);
+    let product;
+    try {
+  product = await Product.create(productData);
+    } catch (err) {
+      if (err.name === 'ValidationError') {
+        const fieldErrors = Object.values(err.errors).map(e => e.message);
+        return res.status(400).json({ success: false, message: 'Validation failed', errors: fieldErrors });
+      }
+      throw err;
+    }
 
     console.log('Product created:', product._id);
 
@@ -361,22 +452,58 @@ const updateProduct = async (req, res) => {
 
     const updateData = { ...req.body };
 
-    // If a new file buffer is provided (Google Drive flow), upload and set imageURL
+    // If a new file buffer is provided (memory storage), upload and set imageURL with Drive or fallback to local
     if (req.file && req.file.buffer) {
-      const { uploadBufferToDrive } = require('../services/googleDrive');
-      const ext = req.file.originalname.split('.').pop()
-      const filename = `product-${Date.now()}.${ext}`
-      const result = await uploadBufferToDrive(req.file.buffer, filename, req.file.mimetype)
-      updateData.imageURL = result.webContentLink || result.webViewLink || updateData.imageURL
+      let uploaded = false;
+      try {
+        const { uploadBufferToDrive } = require('../services/googleDrive');
+        const ext = req.file.originalname.split('.').pop()
+        const filename = `product-${Date.now()}.${ext}`
+        const result = await uploadBufferToDrive(req.file.buffer, filename, req.file.mimetype)
+        updateData.imageURL = result.webContentLink || result.webViewLink || updateData.imageURL
+        uploaded = Boolean(updateData.imageURL)
+      } catch (e) {
+        // ignore and fallback to local save
+      }
+      if (!uploaded) {
+        try {
+          const ext = req.file.originalname.includes('.') ? req.file.originalname.split('.').pop() : 'jpg'
+          const filename = `product-${Date.now()}.${ext}`
+          const uploadsDir = path.join(__dirname, '..', 'uploads', 'products')
+          await fs.promises.mkdir(uploadsDir, { recursive: true })
+          const filePath = path.join(uploadsDir, filename)
+          await fs.promises.writeFile(filePath, req.file.buffer)
+          updateData.imageURL = `${req.protocol}://${req.get('host')}/uploads/products/${filename}`
+        } catch (writeErr) {
+          console.error('Local save fallback failed:', writeErr)
+        }
+      }
     } else if (req.file && req.file.path) {
       updateData.imageURL = req.file.path
     }
 
-    // Normalize sizes like in create
-    let sizes = updateData.sizes;
-    if (sizes && typeof sizes === 'string') {
-      sizes = sizes.includes(',') ? sizes.split(',').map(s => s.trim()).filter(Boolean) : [sizes]
-      updateData.sizes = sizes
+    // Normalize sizes like in create (shared logic)
+    if (updateData.sizes) {
+      const allowedSizes = ['XS','S','M','L','XL','XXL','28','30','32','34','36','38','40','42'];
+      let rawSizes = updateData.sizes;
+      if (Array.isArray(rawSizes)) rawSizes = rawSizes.flat(Infinity);
+      else if (typeof rawSizes === 'string') {
+        const trimmed = rawSizes.trim();
+        if ((trimmed.startsWith('[') && trimmed.endsWith(']')) || (trimmed.startsWith('{') && trimmed.endsWith('}'))) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            rawSizes = Array.isArray(parsed) ? parsed : [parsed];
+          } catch (e) {
+            rawSizes = trimmed.includes(',') ? trimmed.split(',') : [trimmed];
+          }
+        } else {
+          rawSizes = trimmed.includes(',') ? trimmed.split(',') : [trimmed];
+        }
+      }
+      let sizes = Array.isArray(rawSizes) ? rawSizes.map(s => String(s).trim()).filter(Boolean) : [];
+      sizes = sizes.flat(Infinity);
+      sizes = [...new Set(sizes)].filter(s => allowedSizes.includes(s));
+      updateData.sizes = sizes;
     }
 
     const product = await Product.findByIdAndUpdate(
