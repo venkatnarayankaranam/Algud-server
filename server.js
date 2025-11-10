@@ -118,24 +118,35 @@ dotenv.config();
 connectDB();
 
 const app = express();
+
+// ---------- TRUST REVERSE PROXY (Render / Vercel) ----------
 app.set("trust proxy", 1);
-// ---------- CORS SETUP (static allow list, credentials enabled) ----------
+
+// ---------- ALLOWED ORIGINS ----------
 const allowedOrigins = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'https://algud-iota.vercel.app'
+  "http://localhost:3000",
+  "http://localhost:5173",
+  "https://algud-iota.vercel.app"
 ];
 
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true
-}));
+// ---------- CORS FIX (COOKIE SAFE) ----------
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
 
-// ---------- MIDDLEWARE ----------
+  if (req.method === "OPTIONS") return res.sendStatus(200);
+  next();
+});
+
+// ---------- BODY PARSERS ----------
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.set('trust proxy', 1); // Needed for OAuth on Render
 
 // ---------- PASSPORT / GOOGLE OAUTH ----------
 configurePassport();
@@ -164,15 +175,15 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Optional root route
+// Root
 app.get('/', (req, res) => {
   res.send('🚀 ALGUD Backend is live!');
 });
 
-// ---------- ERROR HANDLING ----------
+// Error handling
 app.use(errorHandler);
 
-// 404 handler
+// 404 fallback
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
@@ -187,24 +198,17 @@ const MAX_RETRIES = 10;
 function startServer(port, retriesLeft = MAX_RETRIES) {
   const server = app.listen(port, () => {
     console.log(`🚀 ALGUD Server running on port ${port}`);
-    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🔗 Health check: http://localhost:${port}/api/health`);
   });
 
   server.on('error', (err) => {
     if (err && err.code === 'EADDRINUSE') {
-      console.error(`Port ${port} is already in use.`);
       if (retriesLeft > 0) {
         const nextPort = port + 1;
-        console.log(`Trying port ${nextPort} (${retriesLeft - 1} retries left)...`);
-        try {
-          server.close(() => startServer(nextPort, retriesLeft - 1));
-        } catch (closeErr) {
-          setTimeout(() => startServer(nextPort, retriesLeft - 1), 200);
-        }
+        console.log(`Port ${port} in use. Trying ${nextPort}...`);
+        server.close(() => startServer(nextPort, retriesLeft - 1));
         return;
       }
-      console.error('No available ports found. Exiting.');
+      console.error('No free ports. Exiting.');
       process.exit(1);
     }
     throw err;

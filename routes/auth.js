@@ -80,7 +80,6 @@ const { authMiddleware } = require('../middleware/auth');
 const passport = require('passport');
 
 const router = express.Router();
-
 // Validation rules
 const registerValidation = [
   body('name')
