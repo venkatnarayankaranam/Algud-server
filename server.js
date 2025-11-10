@@ -119,25 +119,15 @@ connectDB();
 
 const app = express();
 
-// ---------- CORS SETUP ----------
-// Allow client from env when set, plus common local dev ports and deployed URL.
+// ---------- CORS SETUP (static allow list, credentials enabled) ----------
 const allowedOrigins = [
-  process.env.CLIENT_URL,
-  'http://localhost:5173',            // Vite dev
-  'http://localhost:3001',            // Vite fallback dev port
-  'http://localhost:3000',            // CRA/Next dev
-  'https://algud-iota.vercel.app'     // Deployed frontend
-].filter(Boolean);
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://algud-iota.vercel.app'
+];
 
 app.use(cors({
-  origin: function(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('CORS not allowed'));
-    }
-  },
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  origin: allowedOrigins,
   credentials: true
 }));
 
