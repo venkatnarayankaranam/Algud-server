@@ -126,11 +126,9 @@ app.set("trust proxy", 1);
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
-  "https://algud-iota.vercel.app",
-  "https://algud-server.onrender.com"
+  "https://algud-iota.vercel.app"
 ];
 
-// ---------- CORS FIX (COOKIE SAFE) ----------
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (allowedOrigins.includes(origin)) {
@@ -143,6 +141,8 @@ app.use((req, res, next) => {
   if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
+
+app.set("trust proxy", 1);
 
 // ---------- BODY PARSERS ----------
 app.use(express.json({ limit: '10mb' }));
