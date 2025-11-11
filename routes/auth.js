@@ -105,22 +105,19 @@ router.get(
   '/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: '/login' }),
   (req, res) => {
-
     const token = req.user?.token;
-    if (!token) return res.redirect("https://www.algud.in/login");
+    if (!token) return res.redirect('https://www.algud.in/login');
 
-    // ✅ Set cookie for all subdomains under ALGUD
-    res.cookie("token", token, {
+    // If behind Vercel rewrite the response host will be algud.in / www.algud.in so Set-Cookie with domain works
+    res.cookie('token', token, {
       httpOnly: true,
       secure: true,
-      sameSite: "none",
-      domain: ".algud.in",   // <--- IMPORTANT
-      path: "/",
-      maxAge: 30 * 24 * 60 * 60 * 1000,
+      sameSite: 'none',
+      domain: '.algud.in',
+      path: '/',
+      maxAge: 30 * 24 * 60 * 60 * 1000
     });
-
-    // ✅ Redirect user back to ALGUD website
-    return res.redirect("https://www.algud.in");
+    return res.redirect('https://www.algud.in');
   }
 );
 
