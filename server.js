@@ -126,8 +126,13 @@ app.set("trust proxy", 1);
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
-  "https://algud-iota.vercel.app"
+  "https://algud-iota.vercel.app",
+  "https://algud.in",
+  "https://www.algud.in",
+  "https://algud-server.onrender.com"
 ];
+
+app.set("trust proxy", 1);
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
@@ -137,12 +142,9 @@ app.use((req, res, next) => {
   res.header("Access-Control-Allow-Credentials", "true");
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
   res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-
   if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
-
-app.set("trust proxy", 1);
 
 // ---------- BODY PARSERS ----------
 app.use(express.json({ limit: '10mb' }));
