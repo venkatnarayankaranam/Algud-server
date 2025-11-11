@@ -78,6 +78,10 @@ const { body } = require('express-validator');
 const { register, login, getMe } = require('../controllers/authController');
 const { authMiddleware } = require('../middleware/auth');
 const passport = require('passport');
+const jwt = require('jsonwebtoken');
+
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://www.algud.in';
+const JWT_SECRET = process.env.JWT_SECRET || 'algud_super_secret_jwt_key_2024';
 
 const router = express.Router();
 
@@ -105,21 +109,60 @@ router.get(
   '/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: '/login' }),
   (req, res) => {
-    const token = req.user?.token;
-    if (!token) return res.redirect('https://www.algud.in/login');
+    try {
+      const token = req.user?.token;
+      if (!token) return res.redirect(`${FRONTEND_URL}/login?error=missing_token`);
 
-    // If behind Vercel rewrite the response host will be algud.in / www.algud.in so Set-Cookie with domain works
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      domain: '.algud.in',
-      path: '/',
-      maxAge: 30 * 24 * 60 * 60 * 1000
-    });
-    return res.redirect('https://www.algud.in');
+      const redirectUrl = new URL('/api/auth/google/final', FRONTEND_URL);
+      redirectUrl.searchParams.set('token', token);
+      if (req.query.state) redirectUrl.searchParams.set('state', req.query.state);
+
+      return res.redirect(redirectUrl.toString());
+    } catch (error) {
+      console.error('Google callback error:', error);
+      return res.redirect(`${FRONTEND_URL}/login?error=google_callback_failed`);
+    }
   }
 );
+
+router.get('/google/final', (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.redirect(`${FRONTEND_URL}/login?error=missing_token`);
+
+  try {
+    // Ensure token is issued by this server
+    jwt.verify(token, JWT_SECRET);
+  } catch (error) {
+    console.error('Google final token verify failed:', error);
+    return res.redirect(`${FRONTEND_URL}/login?error=invalid_token`);
+  }
+
+  const forwardedHost = (req.headers['x-forwarded-host'] || '').toString().toLowerCase();
+  const hostname = (forwardedHost || req.hostname || '').toLowerCase();
+  const isProd = process.env.NODE_ENV === 'production';
+  const secure = Boolean(isProd || req.secure || req.headers['x-forwarded-proto'] === 'https');
+
+  let cookieDomain;
+  if (isProd) {
+    if (hostname.endsWith('algud.in')) {
+      cookieDomain = '.algud.in';
+    } else if (hostname) {
+      cookieDomain = hostname;
+    }
+  }
+
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure,
+    sameSite: secure ? 'none' : 'lax',
+    domain: cookieDomain,
+    path: '/',
+    maxAge: 30 * 24 * 60 * 60 * 1000
+  });
+
+  const redirectTarget = req.query.state ? `${FRONTEND_URL}${decodeURIComponent(req.query.state)}` : `${FRONTEND_URL}/`;
+  return res.redirect(redirectTarget);
+});
 
 // Temporary cookie test endpoint (safe to keep but can be removed later)
 router.get('/cookie-test', (req, res) => {
