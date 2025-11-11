@@ -121,6 +121,19 @@ router.get(
   }
 );
 
+// Temporary cookie test endpoint (safe to keep but can be removed later)
+router.get('/cookie-test', (req, res) => {
+  res.cookie('token-test', 'ok', {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+    domain: '.algud.in',
+    path: '/',
+    maxAge: 10 * 60 * 1000
+  });
+  return res.json({ success: true, message: 'Test cookie set' });
+});
+
 // Logout
 router.post('/logout', (req, res) => {
   res.clearCookie('token', {
