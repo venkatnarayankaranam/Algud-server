@@ -97,41 +97,38 @@ const loginValidation = [
 router.post('/register', registerValidation, register);
 router.post('/login', loginValidation, login);
 
-// Google OAuth Start
+// Google Login Start
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
-// Google OAuth Callback
+// ✅ Google Login Callback (FINAL FIX)
 router.get(
   '/google/callback',
   passport.authenticate('google', { session: false, failureRedirect: '/login' }),
   (req, res) => {
-    const ENV = process.env.NODE_ENV;
-    const clientUrl = process.env.CLIENT_URL
-      || (ENV === 'production' ? 'https://algud.in' : 'http://localhost:5173');
 
     const token = req.user?.token;
-    if (!token) return res.redirect(`${clientUrl}/login`);
+    if (!token) return res.redirect("https://www.algud.in/login");
 
-    const isProd = ENV === 'production';
-
+    // ✅ Set cookie for all subdomains under ALGUD
     res.cookie("token", token, {
       httpOnly: true,
-      secure: isProd,
+      secure: true,
       sameSite: "none",
-      domain: isProd ? ".algud.in" : undefined, // <--- Critical Fix
+      domain: ".algud.in",   // <--- IMPORTANT
       path: "/",
       maxAge: 30 * 24 * 60 * 60 * 1000,
     });
 
-    return res.redirect(clientUrl);
+    // ✅ Redirect user back to ALGUD website
+    return res.redirect("https://www.algud.in");
   }
 );
 
 // Logout
 router.post('/logout', (req, res) => {
   res.clearCookie('token', {
-    domain: process.env.NODE_ENV === 'production' ? '.algud.in' : undefined,
-    path: "/"
+    domain: '.algud.in',
+    path: '/'
   });
   return res.json({ success: true });
 });
