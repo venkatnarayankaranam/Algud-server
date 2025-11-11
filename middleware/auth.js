@@ -4,9 +4,11 @@ const User = require('../models/User');
 // Verify JWT token
 const authMiddleware = async (req, res, next) => {
   try {
-    // Support token via Authorization header OR httpOnly cookie named 'token'
-    let token = req.header('Authorization')?.replace('Bearer ', '');
-    if (!token && req.cookies && req.cookies.token) token = req.cookies.token;
+    // Prefer httpOnly cookie first, then fallback to Authorization header
+    let token = req.cookies && req.cookies.token;
+    if (!token && req.header('Authorization')) {
+      token = req.header('Authorization').replace('Bearer ', '');
+    }
     
     if (!token) {
       return res.status(401).json({ message: 'No token, authorization denied' });
