@@ -216,139 +216,90 @@
 
 
 
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const { validationResult } = require('express-validator');
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+const { validationResult } = require("express-validator");
 
+// Generate JWT
 const generateToken = (id) => {
-  const secret = process.env.JWT_SECRET || 'algud_super_secret_jwt_key_2024';
-  return jwt.sign({ id }, secret, { expiresIn: '30d' });
+  const secret = process.env.JWT_SECRET || "algud_super_secret_jwt_key_2024";
+  return jwt.sign({ id }, secret, { expiresIn: "30d" });
 };
 
-// Register
+// Helper to send token in cookie
+const sendTokenCookie = (res, token) => {
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: true,          // REQUIRED on HTTPS (Vercel/Render)
+    sameSite: "none",      // REQUIRED because frontend & backend are different domains
+    path: "/",             
+    maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+  });
+};
+
+// REGISTER
 const register = async (req, res) => {
   try {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, message: 'Validation errors', errors: errors.array() });
-    }
+    if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
 
     const { name, email, password } = req.body;
 
     const userExists = await User.findOne({ email });
-    if (userExists) {
-      return res.status(400).json({ success: false, message: 'User already exists with this email' });
-    }
+    if (userExists) return res.status(400).json({ success: false, message: "User already exists" });
 
     const user = await User.create({ name, email, password });
 
     const token = generateToken(user._id);
-    try { user.lastToken = token; await user.save(); } catch {}
-
-    const isProd = process.env.NODE_ENV === 'production';
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
-      path: '/', 
-      maxAge: 30 * 24 * 60 * 60 * 1000
-    });
+    sendTokenCookie(res, token);
 
     return res.status(201).json({
       success: true,
-      message: 'User registered successfully',
+      message: "User registered successfully",
       data: { _id: user._id, name: user.name, email: user.email, role: user.role }
     });
-
-  } catch (error) {
-    console.error('Register error:', error);
-    res.status(500).json({ success: false, message: 'Server error during registration' });
+  } catch (err) {
+    console.error("Register error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Login
+// LOGIN
 const login = async (req, res) => {
   try {
     const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ success: false, message: 'Validation errors', errors: errors.array() });
-    }
+    if (!errors.isEmpty()) return res.status(400).json({ success: false, errors: errors.array() });
 
     const { email, password } = req.body;
+
     const user = await User.findOne({ email });
-    if (!user || !(await user.matchPassword(password))) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
+    if (!user || !(await user.matchPassword(password)))
+      return res.status(401).json({ success: false, message: "Invalid credentials" });
 
     const token = generateToken(user._id);
-    try { user.lastToken = token; await user.save(); } catch {}
-
-    const isProd = process.env.NODE_ENV === 'production';
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
-      path: '/', 
-      maxAge: 30 * 24 * 60 * 60 * 1000
-    });
+    sendTokenCookie(res, token);
 
     return res.json({
       success: true,
-      message: 'Login successful',
+      message: "Login successful",
       data: { _id: user._id, name: user.name, email: user.email, role: user.role }
     });
-
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ success: false, message: 'Server error during login' });
+  } catch (err) {
+    console.error("Login error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Get Me
+// GET ME
 const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    const user = await User.findById(req.user.id).select("-password");
+    if (!user) return res.status(401).json({ success: false, message: "User not found" });
+
     res.json({ success: true, data: user });
   } catch {
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Google OAuth Auth
-const googleAuth = async (req, res) => {
-  try {
-    const { idToken } = req.body;
-    if (!idToken) return res.status(400).json({ success: false, message: 'Missing idToken' });
-
-    const { OAuth2Client } = require('google-auth-library');
-    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
-    const ticket = await client.verifyIdToken({ idToken, audience: process.env.GOOGLE_CLIENT_ID });
-
-    const { email, name } = ticket.getPayload();
-    if (!email) return res.status(400).json({ success: false, message: 'Google account has no email' });
-
-    let user = await User.findOne({ email });
-    if (!user) {
-      user = await User.create({ name: name || 'Google User', email, password: Math.random().toString(36).slice(-12) });
-    }
-
-    const token = generateToken(user._id);
-    try { user.lastToken = token; await user.save(); } catch {}
-
-    const isProd = process.env.NODE_ENV === 'production';
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
-      path: '/', 
-      maxAge: 30 * 24 * 60 * 60 * 1000
-    });
-
-    return res.json({ success: true, data: { _id: user._id, name: user.name, email: user.email, role: user.role } });
-
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Google authentication failed' });
-  }
-};
-
-module.exports = { register, login, getMe, googleAuth, generateToken };
+module.exports = { register, login, getMe };

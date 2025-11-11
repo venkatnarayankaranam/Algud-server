@@ -105,117 +105,95 @@
 
 
 
-const express = require('express');
-const cors = require('cors');
-const dotenv = require('dotenv');
-const connectDB = require('./config/database');
-const errorHandler = require('./middleware/errorHandler');
-const cookieParser = require('cookie-parser');
-const passport = require('passport');
-const configurePassport = require('./config/passport');
+const express = require("express");
+const cors = require("cors");
+const dotenv = require("dotenv");
+const connectDB = require("./config/database");
+const cookieParser = require("cookie-parser");
+const passport = require("passport");
+const configurePassport = require("./config/passport");
+const errorHandler = require("./middleware/errorHandler");
 
 dotenv.config();
 connectDB();
 
 const app = express();
 
-// ---------- TRUST REVERSE PROXY (Render / Vercel) ----------
+// Trust Reverse Proxy (Required on Render/Vercel to allow Secure Cookies)
 app.set("trust proxy", 1);
 
-// ---------- ALLOWED ORIGINS ----------
+// ---------------- ALLOWED FRONTEND ORIGINS ----------------
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
   "https://algud-iota.vercel.app",
   "https://algud.in",
-  "https://www.algud.in",
-  "https://algud-server.onrender.com"
+  "https://www.algud.in"
 ];
 
-app.set("trust proxy", 1);
+// ---------------- CORS ----------------
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, origin);
+      } else {
+        callback(new Error("CORS blocked origin: " + origin));
+      }
+    },
+    credentials: true,
+    methods: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+  })
+);
 
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
-    res.header("Access-Control-Allow-Origin", origin);
-  }
-  res.header("Access-Control-Allow-Credentials", "true");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  if (req.method === "OPTIONS") return res.sendStatus(200);
-  next();
-});
-
-// ---------- BODY PARSERS ----------
-app.use(express.json({ limit: '10mb' }));
+// ---------------- BODY PARSERS ----------------
+app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ---------- PASSPORT / GOOGLE OAUTH ----------
+// ---------------- PASSPORT ----------------
 configurePassport();
 app.use(passport.initialize());
 
-// ---------- DEBUG LOGGING ----------
+// ---------------- DEBUG LOG ----------------
 app.use((req, res, next) => {
-  console.log(`[DEBUG] ${req.method} ${req.originalUrl}`);
+  console.log(`[${req.method}] ${req.originalUrl}`);
   next();
 });
 
-// ---------- ROUTES ----------
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/products', require('./routes/products'));
-app.use('/api/orders', require('./routes/orders'));
-app.use('/api/payment', require('./routes/payment'));
-app.use('/api/admin', require('./routes/admin'));
-app.use('/api/upload', require('./routes/upload'));
+// ---------------- ROUTES ----------------
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/products", require("./routes/products"));
+app.use("/api/orders", require("./routes/orders"));
+app.use("/api/payment", require("./routes/payment"));
+app.use("/api/admin", require("./routes/admin"));
+app.use("/api/upload", require("./routes/upload"));
 
-// Health check
-app.get('/api/health', (req, res) => {
+// Health Check
+app.get("/api/health", (req, res) => {
   res.json({
     success: true,
-    message: 'ALGUD API is running',
+    message: "ALGUD API is running",
     timestamp: new Date().toISOString()
   });
 });
 
 // Root
-app.get('/', (req, res) => {
-  res.send('🚀 ALGUD Backend is live!');
+app.get("/", (req, res) => {
+  res.send("🚀 ALGUD Backend is live!");
 });
 
-// Error handling
+// Error handler
 app.use(errorHandler);
 
 // 404 fallback
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found'
-  });
+app.use("*", (req, res) => {
+  res.status(404).json({ success: false, message: "Route not found" });
 });
 
-// ---------- SERVER START ----------
-const PORT = parseInt(process.env.PORT, 10) || 5000;
-const MAX_RETRIES = 10;
+// ---------------- START SERVER ----------------
+const PORT = process.env.PORT || 5000;
 
-function startServer(port, retriesLeft = MAX_RETRIES) {
-  const server = app.listen(port, () => {
-    console.log(`🚀 ALGUD Server running on port ${port}`);
-  });
-
-  server.on('error', (err) => {
-    if (err && err.code === 'EADDRINUSE') {
-      if (retriesLeft > 0) {
-        const nextPort = port + 1;
-        console.log(`Port ${port} in use. Trying ${nextPort}...`);
-        server.close(() => startServer(nextPort, retriesLeft - 1));
-        return;
-      }
-      console.error('No free ports. Exiting.');
-      process.exit(1);
-    }
-    throw err;
-  });
-}
-
-startServer(PORT);
+app.listen(PORT, () => {
+  console.log(`🚀 ALGUD Server running on port ${PORT}`);
+});
