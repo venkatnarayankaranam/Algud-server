@@ -45,7 +45,7 @@ router.get('/products', authMiddleware, adminMiddleware, getAllProducts);
 // @route   POST /api/admin/products
 // @desc    Create new product
 // @access  Private/Admin
-router.post('/products', authMiddleware, adminMiddleware, upload.single('image'), handleUploadError, createProduct);
+router.post('/products', authMiddleware, adminMiddleware, upload.array('media', 10), handleUploadError, createProduct);
 
 // @route   PUT /api/admin/products/:id
 // @desc    Update product

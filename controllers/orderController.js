@@ -85,7 +85,7 @@ const createOrder = async (req, res) => {
 // @access  Private
 const getUserOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ userId: req.user._id })
+    const orders = await Order.find({ userId: req.user._id, paymentStatus: 'Paid' })
       .populate('products.productId', 'name imageURL price')
       .sort({ createdAt: -1 });
 

@@ -26,22 +26,19 @@ const productSchema = new mongoose.Schema({
     type: String,
     enum: ['XS', 'S', 'M', 'L', 'XL', 'XXL', '28', '30', '32', '34', '36', '38', '40', '42']
   }],
-  imageURL: {
-    type: String,
-    required: [true, 'Image URL is required'],
-    validate: {
-      // Accept Cloudinary URLs, Google Drive direct-view URLs, or any http/https URL.
-      validator: function(v) {
-        if (!v) return false
-        // Cloudinary (res.cloudinary.com or api.cloudinary.com) or Google Drive direct view
-        const cloudinaryPattern = /^https?:\/\/(res|api)\.cloudinary\.com\//i
-        const drivePattern = /^https:\/\/drive\.google\.com\/uc\?export=view&id=/i
-        const genericHttp = /^https?:\/\/.+/i
-        return cloudinaryPattern.test(v) || drivePattern.test(v) || genericHttp.test(v)
+  media: [
+    {
+      type: {
+        type: String,
+        enum: ['image', 'video'],
+        required: true
       },
-      message: 'Please provide a valid image URL (Cloudinary, Google Drive, or https URL)'
+      url: {
+        type: String,
+        required: true
+      }
     }
-  },
+  ],
   stock: {
     type: Number,
     required: [true, 'Stock quantity is required'],

@@ -24,8 +24,12 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['user', 'admin'],
     default: 'user'
-  }
-  ,
+  },
+  wishlist: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product',
+    default: []
+  }],
   // Store last issued JWT (optional). This helps server-side OAuth flows keep
   // a record of the most recently issued token for the user. It's not used
   // for authentication checks (JWT remains stateless), but can be useful for

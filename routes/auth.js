@@ -77,6 +77,7 @@ const express = require('express');
 const { body } = require('express-validator');
 const { register, login, getMe } = require('../controllers/authController');
 const { authMiddleware } = require('../middleware/auth');
+const { OAuth2Client } = require('google-auth-library');
 const passport = require('passport');
 const jwt = require('jsonwebtoken');
 
@@ -105,25 +106,53 @@ router.post('/login', loginValidation, login);
 router.get('/google', passport.authenticate('google', { scope: ['profile', 'email'] }));
 
 // ✅ Google Login Callback (FINAL FIX)
-router.get(
-  '/google/callback',
-  passport.authenticate('google', { session: false, failureRedirect: '/login' }),
-  (req, res) => {
-    try {
-      const token = req.user?.token;
-      if (!token) return res.redirect(`${FRONTEND_URL}/login?error=missing_token`);
+router.get('/google/callback', async (req, res) => {
+  try {
+    const code = req.query.code;
+    if (!code) return res.redirect(`${FRONTEND_URL}/login?error=missing_code`);
 
-      const redirectUrl = new URL('/api/auth/google/final', FRONTEND_URL);
-      redirectUrl.searchParams.set('token', token);
-      if (req.query.state) redirectUrl.searchParams.set('state', req.query.state);
+    const client = new OAuth2Client(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_CALLBACK_URL
+    );
 
-      return res.redirect(redirectUrl.toString());
-    } catch (error) {
-      console.error('Google callback error:', error);
-      return res.redirect(`${FRONTEND_URL}/login?error=google_callback_failed`);
+    // Exchange code for tokens
+    const { tokens } = await client.getToken(code);
+    const idToken = tokens.id_token;
+    if (!idToken) throw new Error('No id_token returned from Google');
+
+    // Verify ID token
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID
+    });
+    const payload = ticket.getPayload();
+    const email = payload.email;
+    const name = payload.name || payload.given_name || 'Google User';
+    if (!email) throw new Error('Google account has no email');
+
+    // Find or create user
+    const User = require('../models/User');
+  const generateToken = require('../utils/generateToken');
+    let user = await User.findOne({ email });
+    if (!user) {
+      user = await User.create({ name, email, password: Math.random().toString(36).slice(-12) });
     }
+  const token = generateToken(user._id);
+    user.lastToken = token;
+    await user.save();
+
+    // Redirect to /google/final with token
+    const redirectUrl = new URL('/api/auth/google/final', FRONTEND_URL);
+    redirectUrl.searchParams.set('token', token);
+    if (req.query.state) redirectUrl.searchParams.set('state', req.query.state);
+    return res.redirect(redirectUrl.toString());
+  } catch (err) {
+    console.error(err.response?.data || err.message);
+    return res.redirect(`${FRONTEND_URL}/login?error=google_callback_failed`);
   }
-);
+});
 
 router.get('/google/final', (req, res) => {
   const { token } = req.query;
@@ -179,9 +208,20 @@ router.get('/cookie-test', (req, res) => {
 
 // Logout
 router.post('/logout', (req, res) => {
+  // Determine domain for cookie clearing
+  const hostname = (req.headers['x-forwarded-host'] || req.hostname || '').toLowerCase();
+  const isProd = process.env.NODE_ENV === 'production';
+  let cookieDomain;
+  if (isProd && hostname.endsWith('algud.in')) {
+    cookieDomain = '.algud.in';
+  }
+  // Always clear for both prod and localhost
   res.clearCookie('token', {
-    domain: '.algud.in',
-    path: '/'
+    domain: cookieDomain, // undefined for localhost, .algud.in for prod
+    path: '/',
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax'
   });
   return res.json({ success: true });
 });

@@ -290,6 +290,7 @@ const getAllProducts = async (req, res) => {
 // @route   POST /api/admin/products
 // @access  Private/Admin
 const createProduct = async (req, res) => {
+
   try {
     // Debug: log incoming payload to help trace client-side Cloudinary uploads
     console.log('createProduct called. req.body keys:', Object.keys(req.body));
@@ -297,12 +298,55 @@ const createProduct = async (req, res) => {
       name: req.body.name,
       category: req.body.category,
       price: req.body.price,
-      stock: req.body.stock,
-      imageURL: req.body.imageURL && String(req.body.imageURL).slice(0, 120)
+      stock: req.body.stock
     });
-    if (req.file) console.log('createProduct received req.file (exists):', !!req.file);
+    if (req.files) console.log('createProduct received req.files:', req.files.length);
 
-  let imageURL = req.body.imageURL || '';
+    // Cloudinary setup
+    const cloudinary = require('cloudinary').v2;
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET
+    });
+
+    // Upload all files to Cloudinary and build media array
+    let media = [];
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const uploadResult = await cloudinary.uploader.upload(file.path, {
+          resource_type: 'auto',
+          folder: 'algud-products'
+        });
+        let type = uploadResult.resource_type;
+        if (type === 'image' || type === 'video') {
+          media.push({ type, url: uploadResult.secure_url });
+        }
+      }
+    }
+
+    // Also accept media URLs from body (for pasted/entered URLs)
+    if (req.body.media) {
+      let urls = [];
+      if (Array.isArray(req.body.media)) {
+        urls = req.body.media;
+      } else if (typeof req.body.media === 'string') {
+        try {
+          urls = JSON.parse(req.body.media);
+        } catch {
+          urls = req.body.media.split(',').map(u => u.trim()).filter(Boolean);
+        }
+      }
+      for (const url of urls) {
+        if (url) {
+          // Guess type by extension
+          const ext = url.split('.').pop().toLowerCase();
+          let type = 'image';
+          if (['mp4', 'webm', 'mov'].includes(ext)) type = 'video';
+          media.push({ type, url });
+        }
+      }
+    }
 
     // If file is uploaded and has a buffer (memoryStorage), try Drive then fallback to local disk
     if (req.file && req.file.buffer) {
@@ -391,10 +435,8 @@ const createProduct = async (req, res) => {
     sizes = [...new Set(sizes)].filter(s => allowedSizes.includes(s));
 
     // Validation guard before hitting Mongoose schema to provide clearer message
-    // Only require imageURL when no file was uploaded.
-    const hasFile = Boolean(req.file && (req.file.buffer || req.file.path))
-    if (!hasFile && !imageURL) {
-      return res.status(400).json({ success: false, message: 'Please upload an image or provide an image URL.' });
+    if (!media.length) {
+      return res.status(400).json({ success: false, message: 'Please upload at least one image or video, or provide media URLs.' });
     }
     if (!sizes.length) {
       return res.status(400).json({ success: false, message: 'At least one valid size is required.' });
@@ -406,7 +448,7 @@ const createProduct = async (req, res) => {
       price: priceNum,
       category: req.body.category,
       stock: stockNum,
-      imageURL,
+      media,
       sizes
     };
 
