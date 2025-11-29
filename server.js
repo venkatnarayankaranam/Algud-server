@@ -22,7 +22,7 @@ app.set("trust proxy", 1);
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:5173",
-  "https://algud-iota.vercel.app",
+  "https://algud-swart.vercel.app",
   "https://algud.in",
   "https://www.algud.in"
 ];
