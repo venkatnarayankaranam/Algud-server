@@ -228,12 +228,14 @@ const generateToken = (id) => {
 
 // Helper to send token in cookie
 const sendTokenCookie = (res, token) => {
+  const isProd = process.env.NODE_ENV === 'production';
   res.cookie("token", token, {
     httpOnly: true,
-    secure: true,          // REQUIRED on HTTPS (Vercel/Render)
-    sameSite: "none",      // REQUIRED because frontend & backend are different domains
+    secure: isProd,        // REQUIRED on HTTPS (Vercel/Render)
+    sameSite: isProd ? "none" : "lax", // 'none' allows cross-domain cookies with secure flag
     path: "/",             
     maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    // DO NOT set domain - let browser handle it naturally for cross-domain to work
   });
 };
 

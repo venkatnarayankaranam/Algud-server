@@ -10,6 +10,14 @@ const authMiddleware = async (req, res, next) => {
       token = req.header('Authorization').replace('Bearer ', '');
     }
     
+    // Debug logging
+    console.log('🔐 Auth Middleware Debug:', {
+      hasCookie: !!req.cookies?.token,
+      hasAuthHeader: !!req.header('Authorization'),
+      cookies: req.cookies,
+      origin: req.headers.origin
+    });
+    
     if (!token) {
       return res.status(401).json({ message: 'No token, authorization denied' });
     }

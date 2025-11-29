@@ -171,22 +171,21 @@ router.get('/google/final', (req, res) => {
   const isProd = process.env.NODE_ENV === 'production';
   const secure = Boolean(isProd || req.secure || req.headers['x-forwarded-proto'] === 'https');
 
-  let cookieDomain;
-  if (isProd) {
-    if (hostname.endsWith('algud.in')) {
-      cookieDomain = '.algud.in';
-    } else if (hostname) {
-      cookieDomain = hostname;
-    }
-  }
-
+  // Set cookie without domain restriction for cross-domain support
   res.cookie('token', token, {
     httpOnly: true,
     secure,
     sameSite: secure ? 'none' : 'lax',
-    domain: cookieDomain,
     path: '/',
     maxAge: 30 * 24 * 60 * 60 * 1000
+    // DO NOT set domain - this allows the cookie to work across different domains
+  });
+
+  console.log('🍪 Setting Google OAuth cookie:', {
+    secure,
+    sameSite: secure ? 'none' : 'lax',
+    isProd,
+    origin: req.headers.origin
   });
 
   // Also include token in URL for cross-domain support (frontend can store in localStorage)
@@ -211,20 +210,14 @@ router.get('/cookie-test', (req, res) => {
 
 // Logout
 router.post('/logout', (req, res) => {
-  // Determine domain for cookie clearing
-  const hostname = (req.headers['x-forwarded-host'] || req.hostname || '').toLowerCase();
   const isProd = process.env.NODE_ENV === 'production';
-  let cookieDomain;
-  if (isProd && hostname.endsWith('algud.in')) {
-    cookieDomain = '.algud.in';
-  }
-  // Always clear for both prod and localhost
+  // Clear cookie with the same settings used when setting it
   res.clearCookie('token', {
-    domain: cookieDomain, // undefined for localhost, .algud.in for prod
     path: '/',
     httpOnly: true,
     secure: isProd,
     sameSite: isProd ? 'none' : 'lax'
+    // DO NOT set domain - must match how cookie was originally set
   });
   return res.json({ success: true });
 });
