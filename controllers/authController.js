@@ -293,10 +293,8 @@ const login = async (req, res) => {
 // GET ME
 const getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select("-password");
-    if (!user) return res.status(401).json({ success: false, message: "User not found" });
-
-    res.json({ success: true, data: user });
+    // req.user is already set by authMiddleware and has password excluded
+    res.json({ success: true, data: req.user });
   } catch {
     res.status(500).json({ success: false, message: "Server error" });
   }
