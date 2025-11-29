@@ -189,8 +189,11 @@ router.get('/google/final', (req, res) => {
     maxAge: 30 * 24 * 60 * 60 * 1000
   });
 
+  // Also include token in URL for cross-domain support (frontend can store in localStorage)
   const redirectTarget = req.query.state ? `${FRONTEND_URL}${decodeURIComponent(req.query.state)}` : `${FRONTEND_URL}/`;
-  return res.redirect(redirectTarget);
+  const redirectUrl = new URL(redirectTarget);
+  redirectUrl.searchParams.set('auth_token', token);
+  return res.redirect(redirectUrl.toString());
 });
 
 // Temporary cookie test endpoint (safe to keep but can be removed later)
